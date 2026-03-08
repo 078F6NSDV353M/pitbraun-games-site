@@ -18,6 +18,7 @@ async function loadBlock(targetId, filePath) {
 async function initPage() {
   await loadBlock("header-block", "blocks/header.html");
   await loadBlock("loader-block", "blocks/loader.html");
+  await loadBlock("social-block", "blocks/social.html");
   await loadBlock("footer-block", "blocks/footer.html");
 }
 
