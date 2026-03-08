@@ -1,91 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<title>PitBraun Games</title>
-
-<style>
-
-body{
-margin:0;
-background:#0f0f10;
-color:white;
-font-family:system-ui, Arial, sans-serif;
-display:flex;
-align-items:center;
-justify-content:center;
-height:100vh;
-text-align:center;
-}
-
-.container{
-max-width:700px;
-padding:40px;
-}
-
-.logo{
-font-size:54px;
-font-weight:800;
-letter-spacing:2px;
-margin-bottom:10px;
-}
-
-.logo span{
-color:#ff7a00;
-}
-
-.subtitle{
-opacity:0.8;
-margin-bottom:40px;
-font-size:18px;
-}
-
-.coming{
-font-size:20px;
-opacity:0.6;
-margin-top:20px;
-}
-
-.loader{
-margin:40px auto;
-width:60px;
-height:60px;
-border:4px solid #333;
-border-top:4px solid #ff7a00;
-border-radius:50%;
-animation:spin 3s linear infinite;
-}
-
-@keyframes spin{
-0%{ transform:rotate(0deg); }
-100%{ transform:rotate(360deg); }
-}
-
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PitBraun Games</title>
+  <link rel="stylesheet" href="css/style.css" />
 </head>
-
 <body>
+  <main class="page">
+    <div id="header-block"></div>
+    <div id="loader-block"></div>
+    <div id="footer-block"></div>
+  </main>
 
-<div class="container">
-
-<div class="logo">
-Pit<span>Braun</span> Games
-</div>
-
-<div class="subtitle">
-Independent Game Development Studio
-</div>
-
-<div class="loader"></div>
-
-<div class="coming">
-Website coming soon
-</div>
-
-</div>
-
+  <script src="js/main.js"></script>
 </body>
 </html>
