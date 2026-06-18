@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin / PitBraun Games</title>
+
+  <link rel="stylesheet" href="../shared/css/reset.css">
+  <link rel="stylesheet" href="../shared/css/variables.css">
+  <link rel="stylesheet" href="../shared/css/global.css">
+
+  <style>
+    body{
+      min-height:100dvh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+    }
+
+    .admin-panel{
+      width:100%;
+      max-width:600px;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+
+    input,
+    textarea,
+    button{
+      width:100%;
+      padding:12px;
+      border:none;
+      border-radius:8px;
+      font:inherit;
+    }
+
+    textarea{
+      min-height:180px;
+      resize:vertical;
+    }
+
+    button{
+      cursor:pointer;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="admin-panel">
+
+    <input
+      type="text"
+      id="title"
+      placeholder="News title"
+    >
+
+    <textarea
+      id="content"
+      placeholder="News content"
+    ></textarea>
+
+    <button id="publish">
+      Publish
+    </button>
+
+  </div>
+
+</body>
+</html>

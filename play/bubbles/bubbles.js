@@ -1,326 +1,4 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Bubbles</title>
-  <style>
-    * {
-      box-sizing: border-box;
-      -webkit-tap-highlight-color: transparent;
-      -webkit-touch-callout: none;
-      -webkit-user-select: none;
-      user-select: none;
-    }
-
-    html,
-    body {
-      margin: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      font-family: Arial, Helvetica, sans-serif;
-      background: #080914;
-      touch-action: none;
-      -webkit-touch-callout: none;
-      -webkit-user-select: none;
-      user-select: none;
-    }
-
-    body {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0;
-    }
-
-    #gameWrap {
-      --game-scale: 1;
-      position: relative;
-      width: min(100vw, 900px, calc(100vh * 0.75));
-      height: min(100vh, 1200px, calc(100vw * 1.333333));
-      aspect-ratio: 3 / 4;
-      max-width: 900px;
-      max-height: 1200px;
-      overflow: hidden;
-      background:
-        radial-gradient(circle at 50% 18%, rgba(92, 45, 255, 0.28), transparent 34%),
-        radial-gradient(circle at 18% 76%, rgba(0, 229, 255, 0.16), transparent 30%),
-        linear-gradient(180deg, #101229 0%, #080914 58%, #060611 100%);
-    }
-
-    canvas {
-      display: block;
-      -webkit-touch-callout: none;
-      -webkit-user-select: none;
-      user-select: none;
-      touch-action: none;
-      width: 100%;
-      height: 100%;
-    }
-
-    .hud {
-      position: absolute;
-      top: calc(14px * var(--game-scale));
-      left: calc(14px * var(--game-scale));
-      right: calc(14px * var(--game-scale));
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: calc(14px * var(--game-scale));
-      pointer-events: none;
-      z-index: 5;
-    }
-
-    .hudBox {
-      min-width: calc(132px * var(--game-scale));
-      padding: calc(15px * var(--game-scale)) calc(18px * var(--game-scale));
-      color: #ffffff;
-      border: 1px solid rgba(255, 255, 255, 0.14);
-      background: rgba(8, 9, 20, 0.46);
-      box-shadow: 0 calc(10px * var(--game-scale)) calc(30px * var(--game-scale)) rgba(0, 0, 0, 0.28);
-      border-radius: calc(24px * var(--game-scale));
-      backdrop-filter: blur(10px);
-    }
-
-    .hudLabel {
-      font-size: calc(16.5px * var(--game-scale));
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: rgba(255, 255, 255, 0.58);
-    }
-
-    .hudValue {
-      margin-top: calc(4px * var(--game-scale));
-      font-size: calc(36px * var(--game-scale));
-      font-weight: 800;
-      line-height: 1;
-    }
-
-    .centerPanel {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: calc(24px * var(--game-scale));
-      z-index: 10;
-      pointer-events: none;
-    }
-
-    .card {
-      width: min(calc(540px * var(--game-scale)), 92%);
-      padding: calc(36px * var(--game-scale)) calc(33px * var(--game-scale));
-      text-align: center;
-      margin: 0 calc(2px * var(--game-scale));
-      color: #ffffff;
-      border: 1px solid rgba(255, 255, 255, 0.16);
-      background: rgba(10, 11, 26, 0.76);
-      box-shadow: 0 calc(36px * var(--game-scale)) calc(120px * var(--game-scale)) rgba(0, 0, 0, 0.46);
-      border-radius: calc(42px * var(--game-scale));
-      backdrop-filter: blur(16px);
-      pointer-events: auto;
-    }
-
-    .card h1 {
-      margin: 0 0 calc(8px * var(--game-scale));
-      width: 100%;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: calc(82px * var(--game-scale));
-      letter-spacing: -0.08em;
-      font-weight: 900;
-      line-height: 1;
-    }
-
-    .titleLetter {
-      flex: 0 0 auto;
-      text-align: center;
-      text-shadow:
-        0 0 calc(8px * var(--game-scale)) currentColor,
-        0 0 calc(18px * var(--game-scale)) currentColor;
-    }
-
-    .titleCyan {
-      color: #00e5ff;
-    }
-
-    .titleYellow {
-      color: #fff35c;
-    }
-
-    .titlePink {
-      color: #ff3df2;
-    }
-
-    .titleGreen {
-      color: #4dff88;
-    }
-
-    .card p {
-      margin: 0 auto calc(27px * var(--game-scale));
-      max-width: calc(420px * var(--game-scale));
-      color: rgba(255, 255, 255, 0.68);
-      font-size: calc(22.5px * var(--game-scale));
-      line-height: 1.35;
-    }
-
-    .button {
-      width: 100%;
-      height: calc(162px * var(--game-scale));
-      color: #ffffff;
-      border: 0;
-      background: linear-gradient(135deg, #00e5ff, #fff35c, #ff3df2);
-      box-shadow: 0 calc(21px * var(--game-scale)) calc(51px * var(--game-scale)) rgba(0, 229, 255, 0.25);
-      border-radius: calc(40px * var(--game-scale));
-      font-size: calc(57px * var(--game-scale));
-      font-weight: 900;
-      cursor: pointer;
-      text-shadow:
-        0 calc(4px * var(--game-scale)) calc(14px * var(--game-scale)) rgba(0,0,0,0.42),
-        0 0 calc(18px * var(--game-scale)) rgba(255,255,255,0.18);
-    }
-
-    .hint {
-      position: absolute;
-      left: 50%;
-      bottom: 92px;
-      width: min(360px, calc(100% - 28px));
-      transform: translateX(-50%);
-      padding: 10px 12px;
-      color: rgba(255, 255, 255, 0.7);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      background: rgba(8, 9, 20, 0.38);
-      border-radius: 16px;
-      font-size: 12px;
-      text-align: center;
-      z-index: 5;
-      pointer-events: none;
-      backdrop-filter: blur(10px);
-    }
-
-    .controlBar {
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      height: 0;
-      background: transparent;
-      backdrop-filter: none;
-      border-top: none;
-      z-index: 2;
-      pointer-events: none;
-    }
-
-    .pauseButton {
-      position: absolute;
-      right: calc(14px * var(--game-scale));
-      bottom: calc(14px * var(--game-scale));
-      width: calc(62px * var(--game-scale));
-      height: calc(62px * var(--game-scale));
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: rgba(255,255,255,0.82);
-      border: 1px solid rgba(255,255,255,0.14);
-      background: rgba(18,22,34,0.72);
-      border-radius: calc(18px * var(--game-scale));
-      backdrop-filter: blur(10px);
-      box-shadow: 0 calc(6px * var(--game-scale)) calc(18px * var(--game-scale)) rgba(0,0,0,0.28);
-      z-index: 9;
-      cursor: pointer;
-    }
-
-    .pauseBars {
-      position: relative;
-      width: calc(18px * var(--game-scale));
-      height: calc(22px * var(--game-scale));
-    }
-
-    .pauseBars::before,
-    .pauseBars::after {
-      content: '';
-      position: absolute;
-      top: 0;
-      width: calc(5px * var(--game-scale));
-      height: 100%;
-      border-radius: calc(4px * var(--game-scale));
-      background: currentColor;
-    }
-
-    .pauseBars::before {
-      left: 0;
-    }
-
-    .pauseBars::after {
-      right: 0;
-    }
-
-    .buildVersion {
-      position: absolute;
-      left: calc(10px * var(--game-scale));
-      bottom: calc(8px * var(--game-scale));
-      z-index: 6;
-      color: rgba(255, 255, 255, 0.34);
-      font-size: calc(16.5px * var(--game-scale));
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      pointer-events: none;
-    }
-
-    .hidden {
-      display: none;
-    }
-  </style>
-</head>
-<body>
-  <div id="gameWrap">
-    <canvas id="gameCanvas"></canvas>
-
-    <div class="hud">
-      <div class="hudBox">
-        <div class="hudLabel">Score</div>
-        <div class="hudValue" id="scoreText">0</div>
-      </div>
-      <div class="hudBox" style="text-align:center;">
-        <div class="hudLabel">Max Score</div>
-        <div class="hudValue" id="maxScoreText">0</div>
-      </div>
-      <div class="hudBox" style="text-align:right;">
-        <div class="hudLabel">Combo</div>
-        <div class="hudValue" id="comboText">x1</div>
-      </div>
-    </div>
-
-    <div class="centerPanel" id="menuPanel">
-      <div class="card">
-        <h1>
-          <span class="titleLetter titleCyan">B</span>
-          <span class="titleLetter titleYellow">U</span>
-          <span class="titleLetter titlePink">B</span>
-          <span class="titleLetter titleGreen">B</span>
-          <span class="titleLetter titleCyan">L</span>
-          <span class="titleLetter titleYellow">E</span>
-          <span class="titleLetter titlePink">S</span>
-        </h1>
-        <p>Tap the screen. Match the color and split the big balls into pieces.</p>
-        <button class="button" id="startButton">START</button>
-      </div>
-    </div>
-
-    <div class="controlBar"></div>
-
-    <div class="hint hidden">Tap to shoot.</div>
-    <button class="pauseButton" id="pauseButton" aria-label="Pause game">
-      <div class="pauseBars"></div>
-    </button>
-
-    <div class="buildVersion">Build V97</div>
-  </div>
-
-  <script>
-    const canvas = document.getElementById('gameCanvas');
+const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const scoreText = document.getElementById('scoreText');
     const comboText = document.getElementById('comboText');
@@ -438,9 +116,23 @@
 
     function gameOver() {
       running = false;
+
       menuPanel.classList.remove('hidden');
-      menuPanel.querySelector('h1').textContent = 'GAME OVER';
-      menuPanel.querySelector('p').textContent = 'Score: ' + score + '. Try again and keep the combo.';
+
+      const title = menuPanel.querySelector('h1');
+
+      title.textContent = 'GAME OVER';
+
+      title.style.display = 'block';
+      title.style.textAlign = 'center';
+      title.style.width = '100%';
+
+      title.style.letterSpacing = '-0.03em';
+      title.style.transform = 'translateX(-2px)';
+
+      menuPanel.querySelector('p').innerHTML =
+        'Score: ' + score + '<br><br>Try again and keep the combo.';
+
       startButton.textContent = 'RESTART';
     }
 
@@ -1112,20 +804,38 @@
     window.addEventListener('keydown', (event) => {
       if (event.repeat) return;
 
-      const key = event.key.toLowerCase();
+      if (event.code === 'Space') {
+        event.preventDefault();
 
-      if (key === 'z') {
-        activeColor = 0;
-        playClickSound();
-      } else if (key === 'x') {
-        activeColor = 1;
-        playClickSound();
-      } else if (key === 'c') {
-        activeColor = 2;
-        playClickSound();
-      } else if (key === 'v') {
-        activeColor = 3;
-        playClickSound();
+        if (!running) {
+          startGame();
+        } else {
+          togglePause();
+        }
+
+        return;
+      }
+
+      switch (event.code) {
+        case 'KeyZ':
+          activeColor = 0;
+          playClickSound();
+          break;
+
+        case 'KeyX':
+          activeColor = 1;
+          playClickSound();
+          break;
+
+        case 'KeyC':
+          activeColor = 2;
+          playClickSound();
+          break;
+
+        case 'KeyV':
+          activeColor = 3;
+          playClickSound();
+          break;
       }
     });
     startButton.addEventListener('click', startGame);
@@ -1133,6 +843,3 @@
 
     maxScoreText.textContent = maxScore;
     requestAnimationFrame(resizeAndDraw);
-  </script>
-</body>
-</html>
