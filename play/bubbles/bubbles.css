@@ -282,7 +282,7 @@ canvas{
 
 .buildVersion{
   position:absolute;
-  left:calc(10px * var(--game-scale));
+  left:calc(16px * var(--game-scale));
   bottom:calc(8px * var(--game-scale));
 
   z-index:6;
@@ -299,3 +299,32 @@ canvas{
   display:none;
 }
 
+.bubblesSoundButton{
+  position:absolute;
+  left:calc(16px * var(--game-scale));
+  bottom:calc(36px * var(--game-scale));
+  z-index:30;
+
+  width:calc(48px * var(--game-scale));
+  height:calc(48px * var(--game-scale));
+  padding:0;
+
+  color:rgba(255,255,255,0.86);
+  border:1px solid rgba(255,255,255,0.45);
+  background:rgba(3,7,18,0.55);
+  box-shadow:none;
+  border-radius:calc(12px * var(--game-scale));
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  cursor:pointer;
+  touch-action:manipulation;
+}
+
+.bubblesSoundButton svg{
+  width:calc(32px * var(--game-scale));
+  height:calc(32px * var(--game-scale));
+  stroke-width:2;
+}
