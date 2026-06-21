@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Blocks / PitBraun Games</title>
 
   <link rel="stylesheet" href="../../shared/css/reset.css">
@@ -42,45 +42,7 @@
   <main class="game-main">
     <section class="game-stage">
       <div class="game-scale">
-        <div class="game-wrap">
-
-          <div class="blocks-title">
-            <img src="/assets/images/play/logo_blocks.png" alt="BLOCKS">
-          </div>
-
-          <div class="highscore-label">
-            HIGH SCORE
-          </div>
-
-          <div class="highscore-value">
-            <span id="highscore">0</span>
-          </div>
-
-          <div class="hud">
-            <div>Score: <span id="score">0</span></div>
-            <div>Level: <span id="level">1</span></div>
-          </div>
-
-          <div class="win-progress" id="winProgress">
-            <div class="win-progress__fill" id="winProgressFill"></div>
-          </div>
-
-          <canvas id="game" width="800" height="1066"></canvas>
-
-          <div class="build-info">
-            Build: <span id="build">117</span>
-          </div>
-
-          <div class="controls-info">
-            Pause — Space / Double Tap<br>
-            Freeze — stops blocks movement for 10 sec (cumulative).<br>
-            Bomb — destroys nearby blocks (chain reaction).<br>
-            Salvation — clears danger zone (costs 2000 score, regress and no points gained).<br>
-            Progress bar — shows your path to victory.<br>
-            Don’t let blocks reach the red line.
-          </div>
-
-        </div>
+        <div class="game-wrap" id="gameRoot" data-game="blocks"></div>
       </div>
     </section>
   </main>
@@ -93,7 +55,8 @@
     </p>
   </footer>
 
-  <script src="blocks.js?v=117"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="./blocks.js?v=119"></script>
 
 </body>
 </html>

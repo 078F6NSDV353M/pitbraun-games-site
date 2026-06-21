@@ -1,9 +1,53 @@
+function createBlocksDom() {
+    const gameRoot = document.getElementById('gameRoot');
+
+    if (!gameRoot) {
+        throw new Error('Blocks: #gameRoot was not found.');
+    }
+
+    gameRoot.innerHTML = `
+<div class="blocksPlayground">
+  <canvas id="game" width="900" height="1200"></canvas>
+
+  <button class="blocksSoundButton" id="blocksSoundButton" type="button" aria-label="Toggle sound">
+    <i data-lucide="volume-2"></i>
+  </button>
+</div>
+
+<div class="blocksPaddleTouchZone" id="blocksPaddleTouchZone"></div>
+
+<div style="display:none">
+  <span id="score">0</span>
+  <span id="highscore">0</span>
+  <span id="level">1</span>
+  <span id="winProgress"></span>
+  <span id="winProgressFill"></span>
+</div>
+`;
+}
+
+createBlocksDom();
+
+requestAnimationFrame(() => {
+    updateSoundButtonIcon();
+
+    blocksSoundButton.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        unlockAudio();
+        toggleSound();
+    });
+});
+
 const canvas = document.getElementById('game');
+const blocksPaddleTouchZone = document.getElementById('blocksPaddleTouchZone');
+const blocksSoundButton = document.getElementById('blocksSoundButton');
 const ctx = canvas.getContext('2d');
 const scoreElement = document.getElementById('score');
 const levelElement = document.getElementById('level');
 const winProgressFillElement = document.getElementById('winProgressFill');
-const winProgressElement = document.getElementById('winProgress'); 
+const winProgressElement = document.getElementById('winProgress');
 
 const highScoreElement = document.getElementById('highscore');
 
@@ -11,19 +55,26 @@ const highScoreElement = document.getElementById('highscore');
 const WIDTH = canvas.width;
 const HEIGHT = canvas.height;
 const UI_SCALE = WIDTH / 480;
+const BUILD_VERSION = '124';
 
 /* Grid */
 const GRID_COLUMNS = 11;
 const GRID_ROWS = 7;
 
 const BLOCK_GAP = 0;
-const PLAY_TOP = 0;
-const BLOCK_TOP = PLAY_TOP;
 const BLOCK_HEIGHT = (WIDTH - BLOCK_GAP * (GRID_COLUMNS + 1)) / GRID_COLUMNS;
 const BLOCK_WIDTH = (WIDTH - BLOCK_GAP * (GRID_COLUMNS + 1)) / GRID_COLUMNS;
 
 const NEW_ROW_INTERVAL = 12000;
 const BLOCK_SPEED_GROWTH = 1.0135;
+
+const HUD_PANEL_HEIGHT = BLOCK_HEIGHT;
+const HUD_TOP = 10 * UI_SCALE;
+const PROGRESS_HEIGHT = 12 * UI_SCALE;
+const PROGRESS_TOP = HUD_PANEL_HEIGHT - PROGRESS_HEIGHT - 2 * UI_SCALE;
+
+const PLAY_TOP = HUD_PANEL_HEIGHT;
+const BLOCK_TOP = 0;
 
 /* Paddle */
 const KEYBOARD_PADDLE_SPEED = 7 * UI_SCALE;
@@ -75,14 +126,26 @@ const HIGH_SCORE_SALT = 'pitbraun_blocks_v1';
 const COMPLETED_KEY = 'blocks_completed';
 
 /* Save */
-const SAVE_COST = 2000;
+const SAVE_COST = 3000;
 const SAFE_ZONE_BLOCKS = 3;
 
 const saveButton = {
     x: WIDTH / 2,
-    y: HEIGHT - 15 * UI_SCALE,
-    width: 80 * UI_SCALE,
-    height: 24 * UI_SCALE
+    y: 0,
+    width: 160 * UI_SCALE,
+    height: 40 * UI_SCALE
+};
+
+const SOUND_ENABLED_KEY = 'blocks_sound_enabled';
+
+let soundEnabled =
+    localStorage.getItem(SOUND_ENABLED_KEY) !== '0';
+
+const soundButton = {
+    x: 10 * UI_SCALE,
+    y: HEIGHT - 40 * UI_SCALE,
+    width: 50 * UI_SCALE,
+    height: 20 * UI_SCALE
 };
 
 const keys = {
@@ -117,6 +180,7 @@ let freezeUntilTime = 0;
 let freezeStoppedAt = 0;
 let freezePauseStartedAt = 0;
 let particles = [];
+let floatingScoreTexts = [];
 let ballVisible = true;
 let winAnimationTime = 0;
 let winExplosionQueue = [];
@@ -137,6 +201,360 @@ bombIconImage.src = BOMB_ICON_SRC;
 
 const freezeIconImage = new Image();
 freezeIconImage.src = FREEZE_ICON_SRC;
+
+/* Audio */
+
+let audioContext = null;
+let audioUnlocked = false;
+let lastFreezeSoundTime = 0;
+
+function unlockAudio() {
+    if (audioUnlocked) {
+        return;
+    }
+
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+    if (audioContext.state === 'suspended') {
+        audioContext.resume();
+    }
+
+    audioUnlocked = true;
+}
+
+let sharedReverbNode = null;
+let sharedReverbInput = null;
+
+function getSharedReverbInput(reverbTime = 0.18) {
+    if (sharedReverbInput) {
+        return sharedReverbInput;
+    }
+
+    const inputGain = audioContext.createGain();
+    const convolver = audioContext.createConvolver();
+    const outputGain = audioContext.createGain();
+
+    const sampleRate = audioContext.sampleRate;
+    const length = Math.floor(sampleRate * reverbTime);
+    const impulse = audioContext.createBuffer(2, length, sampleRate);
+
+    for (let channel = 0; channel < 2; channel++) {
+        const data = impulse.getChannelData(channel);
+
+        for (let i = 0; i < length; i++) {
+            const decay = 1 - i / length;
+            data[i] = (Math.random() * 2 - 1) * decay * decay;
+        }
+    }
+
+    convolver.buffer = impulse;
+    outputGain.gain.value = 1;
+
+    inputGain.connect(convolver);
+    convolver.connect(outputGain);
+    outputGain.connect(audioContext.destination);
+
+    sharedReverbNode = convolver;
+    sharedReverbInput = inputGain;
+
+    return sharedReverbInput;
+}
+
+function createDistortionCurve(amount = 20) {
+    const samples = 44100;
+    const curve = new Float32Array(samples);
+    const deg = Math.PI / 180;
+
+    for (let i = 0; i < samples; i++) {
+        const x = i * 2 / samples - 1;
+
+        curve[i] =
+            (3 + amount) * x * 20 * deg /
+            (Math.PI + amount * Math.abs(x));
+    }
+
+    return curve;
+}
+
+function playTone({
+    frequency = 440,
+    duration = 0.08,
+    volume = 4,
+    type = 'sine',
+    frequencyEnd = null,
+    delayTime = 0,
+    delayFeedback = 0,
+    delayMix = 0,
+    reverbMix = 0,
+    distortion = 0
+}) {
+    if (!soundEnabled || !audioUnlocked || !audioContext) {
+        return;
+    }
+    const now = audioContext.currentTime;
+
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(frequency, now);
+
+    if (frequencyEnd !== null) {
+        oscillator.frequency.exponentialRampToValueAtTime(
+            Math.max(1, frequencyEnd),
+            now + duration
+        );
+    }
+
+    const finalVolume = Math.min(volume * 8, 0.2);
+    gain.gain.setValueAtTime(finalVolume, now);
+    gain.gain.exponentialRampToValueAtTime(0.0005, now + duration);
+
+    oscillator.connect(gain);
+
+    let outputNode = gain;
+
+    if (distortion > 0) {
+        const distortionNode = audioContext.createWaveShaper();
+        distortionNode.curve = createDistortionCurve(distortion);
+        distortionNode.oversample = '4x';
+
+        outputNode.connect(distortionNode);
+        outputNode = distortionNode;
+    }
+
+    outputNode.connect(audioContext.destination);
+
+    if (delayTime > 0 && delayMix > 0) {
+        const delay = audioContext.createDelay();
+        const feedback = audioContext.createGain();
+        const delayGain = audioContext.createGain();
+
+        delay.delayTime.setValueAtTime(delayTime, now);
+        feedback.gain.setValueAtTime(delayFeedback, now);
+        delayGain.gain.setValueAtTime(delayMix, now);
+
+        outputNode.connect(delay);
+        delay.connect(feedback);
+        feedback.connect(delay);
+        delay.connect(delayGain);
+        delayGain.connect(audioContext.destination);
+    }
+
+    if (reverbMix > 0) {
+        const reverbSend = audioContext.createGain();
+
+        reverbSend.gain.setValueAtTime(reverbMix, now);
+        reverbSend.gain.exponentialRampToValueAtTime(
+            0.001,
+            now + duration
+        );
+
+        outputNode.connect(reverbSend);
+        reverbSend.connect(getSharedReverbInput());
+    }
+
+    oscillator.start(now);
+    oscillator.stop(now + duration);
+}
+
+function playBlockHitSound() {
+    playTone({
+        frequency: 300,
+        frequencyEnd: 600,
+        duration: 0.05,
+        volume: 0.025,
+        type: 'sine',
+    });
+}
+
+function playPaddleHitSound() {
+    playTone({
+        frequency: 200,
+        frequencyEnd: 600,
+        duration: 0.3,
+        volume: 0.035,
+        type: 'triangle',
+        
+    });
+}
+
+function playWallHitSound() {
+    playTone({
+        frequency: 520,
+        frequencyEnd: 260,
+        duration: 0.045,
+        volume: 0.03,
+        type: 'triangle',
+        
+        distortion: 3
+    });
+}
+
+function playBombSound() {
+    playTone({
+        frequency: 120,
+        frequencyEnd: 45,
+        duration: 0.5,
+        volume: 0.015,
+        type: 'square',
+        
+    });
+
+    setTimeout(() => {
+        playTone({
+            frequency: 70,
+            frequencyEnd: 35,
+            duration: 0.22,
+            volume: 0.055,
+            type: 'triangle'
+        });
+    }, 35);
+}
+
+function playFreezeSound() {
+    const now = performance.now();
+
+    if (now - lastFreezeSoundTime < 450) {
+        return;
+    }
+
+    lastFreezeSoundTime = now;
+
+    const notes = [
+        { delay: 0,   frequency: 1568.00, duration: 0.055 },
+        { delay: 80,  frequency: 2093.00, duration: 0.060 },
+        { delay: 170, frequency: 2637.02, duration: 0.070 },
+        { delay: 270, frequency: 3136.00, duration: 0.080 },
+        { delay: 390, frequency: 2349.32, duration: 0.120 }
+    ];
+
+    for (const note of notes) {
+        setTimeout(() => {
+            playTone({
+                frequency: note.frequency,
+                frequencyEnd: note.frequency * 1.025,
+                duration: note.duration,
+                volume: 0.015,
+                type: 'sine',
+                reverbMix: 0.5
+            });
+        }, note.delay);
+    }
+}
+
+function playSalvationSound() {
+    const notes = [
+        { delay: 0,   frequency: 523.25, duration: 0.08 },
+        { delay: 90,  frequency: 659.25, duration: 0.08 },
+        { delay: 180, frequency: 783.99, duration: 0.10 },
+        { delay: 300, frequency: 1046.50, duration: 0.16 }
+    ];
+
+    for (const note of notes) {
+        setTimeout(() => {
+            playTone({
+                frequency: note.frequency,
+                frequencyEnd: note.frequency * 1.02,
+                duration: note.duration,
+                volume: 0.04,
+                type: 'triangle',
+                reverbMix: 0.08
+            });
+        }, note.delay);
+    }
+}
+
+function playStartSound() {
+    playTone({
+        frequency: 440,
+        frequencyEnd: 880,
+        duration: 0.16,
+        volume: 0.04,
+        type: 'triangle'
+    });
+}
+
+function playPauseSound() {
+    playTone({
+        frequency: 420,
+        frequencyEnd: 260,
+        duration: 0.12,
+        volume: 0.035,
+        type: 'sine' 
+    });
+}
+
+function playResumeSound() {
+    playTone({
+        frequency: 260,
+        frequencyEnd: 520,
+        duration: 0.12,
+        volume: 0.035,
+        type: 'sine'
+    });
+}
+
+function playGameOverSound() {
+    const notes = [
+        { delay: 0,   frequency: 392.00, duration: 0.14 },
+        { delay: 150, frequency: 329.63, duration: 0.14 },
+        { delay: 300, frequency: 261.63, duration: 0.18 },
+        { delay: 520, frequency: 196.00, duration: 0.34 }
+    ];
+
+    for (const note of notes) {
+        setTimeout(() => {
+            playTone({
+                frequency: note.frequency,
+                frequencyEnd: note.frequency * 0.985,
+                duration: note.duration,
+                volume: 0.06,
+                type: 'triangle',
+                reverbMix: 0.16,
+                delayTime: 0.09,
+                delayFeedback: 0.16,
+                delayMix: 0.12,
+                distortion: 3
+            });
+        }, note.delay);
+    }
+}
+
+function playWinSound() {
+    const notes = [
+        { delay: 0,    frequency: 523.25, duration: 0.12 },
+        { delay: 120,  frequency: 659.25, duration: 0.12 },
+        { delay: 240,  frequency: 783.99, duration: 0.12 },
+        { delay: 360,  frequency: 1046.5, duration: 0.22 },
+
+        { delay: 640,  frequency: 987.77, duration: 0.12 },
+        { delay: 760,  frequency: 783.99, duration: 0.12 },
+        { delay: 880,  frequency: 880.00, duration: 0.14 },
+        { delay: 1040, frequency: 1046.5, duration: 0.28 },
+
+        { delay: 1380, frequency: 659.25, duration: 0.12 },
+        { delay: 1500, frequency: 783.99, duration: 0.12 },
+        { delay: 1620, frequency: 1046.5, duration: 0.12 },
+        { delay: 1740, frequency: 1318.5, duration: 0.35 }
+    ];
+
+    for (const note of notes) {
+        setTimeout(() => {
+            playTone({
+                frequency: note.frequency,
+                frequencyEnd: note.frequency * 1.015,
+                duration: note.duration,
+                volume: 0.055,
+                type: 'triangle',
+                reverbMix: 0.18,
+                delayTime: 0.075,
+                delayFeedback: 0.18,
+                delayMix: 0.14
+            });
+        }, note.delay);
+    }
+}
 
 const BLOCK_TYPES = [
     { color: '#ff0000', points: 10 },
@@ -240,6 +658,46 @@ function movePaddleByPointerDelta(clientX) {
     lastPointerX = clientX;
 }
 
+function movePaddleToClientX(clientX) {
+    if (!gameStarted || isPaused || gameOver || gameWon) {
+        return;
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = WIDTH / rect.width;
+    const x = (clientX - rect.left) * scaleX;
+
+    paddle.x = x - paddle.width / 2;
+    paddle.x = Math.max(0, Math.min(WIDTH - paddle.width, paddle.x));
+}
+
+function pauseGame() {
+    pauseStartedAt = performance.now();
+    isPaused = true;
+    keys.left = false;
+    keys.right = false;
+    pointerActive = false;
+    lastFrameTime = performance.now();
+    playPauseSound();
+}
+
+function resumeGameFromPause() {
+    const pauseDuration = performance.now() - pauseStartedAt;
+
+    lastNewRowTime += pauseDuration;
+    freezeUntilTime += pauseDuration;
+
+    pauseStartedAt = 0;
+    isPaused = false;
+
+    keys.left = false;
+    keys.right = false;
+    pointerActive = false;
+    lastFrameTime = performance.now();
+
+    playResumeSound();
+}
+
 window.addEventListener('mousedown', event => {
     if (isPaused || gameOver || gameWon) {
     return;
@@ -261,12 +719,19 @@ window.addEventListener('mouseup', () => {
     pointerActive = false;
 });
 
-window.addEventListener('touchstart', event => {
+canvas.addEventListener('touchstart', event => {
     const rect = canvas.getBoundingClientRect();
     const touch = event.touches[0];
 
     const x = (touch.clientX - rect.left) * (WIDTH / rect.width);
     const y = (touch.clientY - rect.top) * (HEIGHT / rect.height);
+
+    if (isPointInsideSoundButton(x, y)) {
+        event.preventDefault();
+        unlockAudio();
+        toggleSound();
+        return;
+    }
 
     if (isPaused && !gameOver && !gameWon) {
         event.preventDefault();
@@ -280,7 +745,7 @@ window.addEventListener('touchstart', event => {
             lastNewRowTime += pauseDuration;
             freezeUntilTime += pauseDuration;
             pauseStartedAt = 0;
-            isPaused = false;
+            resumeGameFromPause();
         }
 
         return;
@@ -310,10 +775,10 @@ window.addEventListener('touchstart', event => {
             lastNewRowTime += pauseDuration;
             freezeUntilTime += pauseDuration;
             pauseStartedAt = 0;
-            isPaused = false;
+            resumeGameFromPause();
         } else {
             pauseStartedAt = performance.now();
-            isPaused = true;
+            pauseGame();
         }
 
         keys.left = false;
@@ -333,6 +798,9 @@ window.addEventListener('touchstart', event => {
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist <= startButton.radius) {
+            unlockAudio();
+            playStartSound();
+
             gameStarted = true;
             lastNewRowTime = performance.now();
             runElapsedTime = 0;
@@ -349,6 +817,9 @@ window.addEventListener('touchstart', event => {
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist <= startButton.radius) {
+            unlockAudio();
+            playStartSound();
+
             restartGame();
             gameStarted = true;
             lastNewRowTime = performance.now();
@@ -364,7 +835,7 @@ window.addEventListener('touchstart', event => {
     lastPointerX = event.touches[0].clientX;
 }, { passive: false });
 
-window.addEventListener('touchmove', event => {
+canvas.addEventListener('touchmove', event => {
     event.preventDefault();
 
     if (!pointerActive) {
@@ -374,15 +845,43 @@ window.addEventListener('touchmove', event => {
     movePaddleByPointerDelta(event.touches[0].clientX);
 }, { passive: false });
 
-window.addEventListener('touchend', () => {
+canvas.addEventListener('touchend', () => {
+    pointerActive = false;
+});
+
+blocksPaddleTouchZone.addEventListener('touchstart', event => {
+    event.preventDefault();
+
+    pointerActive = true;
+    lastPointerX = event.touches[0].clientX;
+}, { passive: false });
+
+blocksPaddleTouchZone.addEventListener('touchmove', event => {
+    event.preventDefault();
+
+    if (!pointerActive) {
+        return;
+    }
+
+    movePaddleByPointerDelta(event.touches[0].clientX);
+}, { passive: false });
+
+blocksPaddleTouchZone.addEventListener('touchend', () => {
     pointerActive = false;
 });
 
 canvas.addEventListener('click', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = (event.clientX - rect.left) * (WIDTH / rect.width);
+    const y = (event.clientY - rect.top) * (HEIGHT / rect.height);
+
+    if (isPointInsideSoundButton(x, y)) {
+        unlockAudio();
+        toggleSound();
+        return;
+    }
+
     if (isPaused && !gameOver && !gameWon) {
-        const rect = canvas.getBoundingClientRect();
-        const x = (event.clientX - rect.left) * (WIDTH / rect.width);
-        const y = (event.clientY - rect.top) * (HEIGHT / rect.height);
 
         const dx = x - startButton.x;
         const dy = y - startButton.y;
@@ -393,15 +892,11 @@ canvas.addEventListener('click', (event) => {
             lastNewRowTime += pauseDuration;
             freezeUntilTime += pauseDuration;
             pauseStartedAt = 0;
-            isPaused = false;
+            resumeGameFromPause();
         }
 
         return;
     }
-
-    const rect = canvas.getBoundingClientRect();
-    const x = (event.clientX - rect.left) * (WIDTH / rect.width);
-    const y = (event.clientY - rect.top) * (HEIGHT / rect.height);
 
     if (gameStarted && !gameOver && !gameWon && !isPaused) {
         const saveLeft = saveButton.x - saveButton.width / 2;
@@ -421,6 +916,9 @@ canvas.addEventListener('click', (event) => {
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist <= startButton.radius) {
+            unlockAudio();
+            playStartSound();
+
             gameStarted = true;
             lastNewRowTime = performance.now();
             runElapsedTime = 0;
@@ -435,6 +933,9 @@ canvas.addEventListener('click', (event) => {
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist <= startButton.radius) {
+            unlockAudio();
+            playStartSound();
+
             restartGame();
             gameStarted = true;
             lastNewRowTime = performance.now();
@@ -456,6 +957,9 @@ window.addEventListener('keydown', event => {
 
     if (event.code === 'Space') {
         if (!gameStarted) {
+            unlockAudio();
+            playStartSound();
+
             gameStarted = true;
             lastNewRowTime = performance.now();
             runElapsedTime = 0;
@@ -463,6 +967,9 @@ window.addEventListener('keydown', event => {
         }
 
         if (gameOver || gameWon) {
+            unlockAudio();
+            playStartSound();
+
             restartGame();
             gameStarted = true;
             return;
@@ -473,10 +980,10 @@ window.addEventListener('keydown', event => {
             lastNewRowTime += pauseDuration;
             freezeUntilTime += pauseDuration;
             pauseStartedAt = 0;
-            isPaused = false;
+            resumeGameFromPause();
         } else {
             pauseStartedAt = performance.now();
-            isPaused = true;
+            pauseGame();
         }
 
         keys.left = false;
@@ -543,6 +1050,7 @@ function restartGame() {
     score = 0;
     level = 1;
     particles = [];
+    floatingScoreTexts = [];
     ballVisible = true;
     runStartTime = 0;
     runElapsedTime = 0;
@@ -599,6 +1107,46 @@ function drawSafeZone() {
     ctx.restore();
 }
 
+function hasFullRowInSafeZone() {
+    const safeZoneTop = paddle.y - BLOCK_HEIGHT * SAFE_ZONE_BLOCKS;
+    const safeZoneBottom = paddle.y;
+
+    for (let row = 0; row < blocks.length; row++) {
+        const y = getBlockY(row);
+
+        if (y < safeZoneTop || y + BLOCK_HEIGHT > safeZoneBottom) {
+            continue;
+        }
+
+        const rowHasActiveBlock = blocks[row].some(block => block && block.active);
+
+        if (rowHasActiveBlock) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function canShowSaveButton() {
+    return (
+        gameStarted &&
+        !gameOver &&
+        !gameWon &&
+        !isPaused &&
+        score >= SAVE_COST &&
+        hasFullRowInSafeZone()
+    );
+}
+
+function updateSaveButtonPosition() {
+    const safeZoneTop = paddle.y - BLOCK_HEIGHT * SAFE_ZONE_BLOCKS;
+    const safeZoneBottom = paddle.y;
+
+    saveButton.x = WIDTH / 2;
+    saveButton.y = safeZoneTop + (safeZoneBottom - safeZoneTop) / 2;
+}
+
 function drawPaddle() {
     ctx.fillStyle = '#e5e7eb';
     ctx.fillRect(paddle.x, paddle.y, paddle.width, paddle.height);
@@ -625,14 +1173,64 @@ function drawFreezeTimer() {
     const seconds = Math.ceil(remainingFreezeTime / 1000);
     const label = `Freeze: ${seconds}s`;
 
+    ctx.save();
+
     ctx.fillStyle = '#dbeafe';
     ctx.font = '20px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(label, WIDTH / 2, HEIGHT - 3);
+
+    ctx.restore();
+}
+
+function drawBuildInfo() {
+    ctx.save();
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.font = '16px Arial';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
-    ctx.fillText(label, 10, HEIGHT - 2);
+    ctx.fillText(`Build v${BUILD_VERSION}`, 20, HEIGHT - 10);
 
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
+    ctx.restore();
+}
+
+function isPointInsideSoundButton(x, y) {
+    return (
+        x >= soundButton.x &&
+        x <= soundButton.x + soundButton.width &&
+        y >= soundButton.y &&
+        y <= soundButton.y + soundButton.height
+    );
+}
+
+function toggleSound() {
+    soundEnabled = !soundEnabled;
+    localStorage.setItem(
+        SOUND_ENABLED_KEY,
+        soundEnabled ? '1' : '0'
+    );
+
+    updateSoundButtonIcon();
+}
+
+function updateSoundButtonIcon() {
+    if (!blocksSoundButton) {
+        return;
+    }
+
+    blocksSoundButton.innerHTML = soundEnabled
+        ? '<i data-lucide="volume-2"></i>'
+        : '<i data-lucide="volume-x"></i>';
+
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
+}
+
+function drawSoundButton() {
+    return;
 }
 
 function drawRunTimer() {
@@ -651,10 +1249,23 @@ function drawRunTimer() {
     ctx.font = '18px Arial';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'bottom';
-    ctx.fillText(label, WIDTH - 10, HEIGHT - 3);
+    ctx.fillText(label, WIDTH - 20, HEIGHT - 10);
 
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
+}
+
+function drawFPS() {
+    ctx.save();
+
+    ctx.fillStyle = 'rgb(0, 255, 0)';
+    ctx.font = '18px Arial';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'bottom';
+
+    ctx.fillText(`FPS: ${fps}`, WIDTH -20, HEIGHT - 32);
+
+    ctx.restore();
 }
 
 function drawBall() {
@@ -798,11 +1409,7 @@ function getRenderedBlockImage(block) {
             renderedCtx.drawImage(icon, 0, 0, BLOCK_WIDTH, BLOCK_HEIGHT);
         }
     } else {
-        renderedCtx.fillStyle = getTextColorForBlock(block.color);
-        renderedCtx.font = `${12 * UI_SCALE}px Arial`;
-        renderedCtx.textAlign = 'center';
-        renderedCtx.textBaseline = 'middle';
-        renderedCtx.fillText(label, BLOCK_WIDTH / 2, BLOCK_HEIGHT / 2);
+        // Point text is now shown only when the block is destroyed.
     }
 
     blockTextImageCache.set(key, renderedCanvas);
@@ -812,9 +1419,7 @@ function getRenderedBlockImage(block) {
 function drawBlock(block, x, y) {
     ctx.drawImage(getRenderedBlockImage(block), x, y, BLOCK_WIDTH, BLOCK_HEIGHT);
 
-    const isCompleted = localStorage.getItem(COMPLETED_KEY) === '1';
-
-    if (!isCompleted || block.isBomb || block.isFreeze) {
+    if (block.isBomb || block.isFreeze) {
         return;
     }
 
@@ -923,6 +1528,62 @@ function drawExplosions() {
     ctx.fillRect(particle.x, particle.y, particle.size, particle.size);
     ctx.globalAlpha = 1;
     }
+}
+
+function addFloatingScoreText(x, y, points, color) {
+    if (points <= 0) {
+        return;
+    }
+
+    floatingScoreTexts.push({
+        x: x,
+        y: y,
+        text: `+${points}`,
+        color: color,
+        life: 1,
+        fontSize: 18
+    });
+}
+
+function addFloatingFreezeText(row, col) {
+    const safeZoneTop = paddle.y - BLOCK_HEIGHT * SAFE_ZONE_BLOCKS;
+    const safeZoneBottom = paddle.y;
+    const seconds = Math.round(FREEZE_DURATION / 1000);
+
+    floatingScoreTexts.push({
+        x: WIDTH / 2,
+        y: safeZoneTop + (safeZoneBottom - safeZoneTop) / 2,
+        text: `FREEZE +${seconds}s`,
+        color: '#93c5fd',
+        life: 1,
+        fontSize: 28
+    });
+}
+
+function updateFloatingScoreTexts(deltaScale) {
+    floatingScoreTexts = floatingScoreTexts.filter(item => {
+        item.y -= 0.45 * deltaScale;
+        item.life -= 0.008 * deltaScale;
+        return item.life > 0;
+    });
+}
+
+function drawFloatingScoreTexts() {
+    ctx.save();
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+
+    for (const item of floatingScoreTexts) {
+        ctx.globalAlpha = Math.max(0, item.life);
+        ctx.fillStyle = item.color;
+        ctx.font = `bold ${(item.fontSize || 24) * UI_SCALE}px Arial`;
+        ctx.fillText(item.text, item.x, item.y);
+    }
+
+    ctx.restore();
+    ctx.globalAlpha = 1;
 }
 
 function setBallDirection(dx, dy) {
@@ -1064,6 +1725,7 @@ function checkWinCondition() {
 
     if (score >= getScoreRequiredToCompleteGame()) {
         gameWon = true;
+        playWinSound();
         winAnimationTime = 0;
         winExplosionStartedAt = performance.now();
         localStorage.setItem(COMPLETED_KEY, '1');
@@ -1138,23 +1800,29 @@ function drawWin() {
 
 function collideWithWalls() {
     if (ball.x - ball.radius <= 0) {
-    ball.x = ball.radius;
-    ball.dx = Math.abs(ball.dx);
+        ball.x = ball.radius;
+        ball.dx = Math.abs(ball.dx);
+        playWallHitSound();
     }
 
     if (ball.x + ball.radius >= WIDTH) {
-    ball.x = WIDTH - ball.radius;
-    ball.dx = -Math.abs(ball.dx);
+        ball.x = WIDTH - ball.radius;
+        ball.dx = -Math.abs(ball.dx);
+        playWallHitSound();
     }
 
     if (ball.y - ball.radius <= PLAY_TOP) {
         ball.y = PLAY_TOP + ball.radius;
         ball.dy = Math.abs(ball.dy);
+        playWallHitSound();
     }
 
     if (ball.y - ball.radius > HEIGHT) {
-    gameOver = true;
-    
+        if (!gameOver) {
+            playGameOverSound();
+        }
+
+        gameOver = true;
     }
 }
 
@@ -1184,31 +1852,32 @@ function collideWithPaddle() {
     const movementY = ball.y - ball.prevY;
     let hitX = ball.x;
 
-    if (movementY !== 0) {
-        let hitTime = (paddleTop - previousBallBottom) / movementY;
-        hitTime = Math.max(0, Math.min(1, hitTime));
-        hitX = ball.prevX + (ball.x - ball.prevX) * hitTime;
-    }
+        if (movementY !== 0) {
+            let hitTime = (paddleTop - previousBallBottom) / movementY;
+            hitTime = Math.max(0, Math.min(1, hitTime));
+            hitX = ball.prevX + (ball.x - ball.prevX) * hitTime;
+        }
 
-    const circleTouchesPaddleTop =
-        hitX + ball.radius >= paddleLeft &&
-        hitX - ball.radius <= paddleRight;
+        const circleTouchesPaddleTop =
+            hitX + ball.radius >= paddleLeft &&
+            hitX - ball.radius <= paddleRight;
 
-    if (circleTouchesPaddleTop) {
-        const safeHitX = Math.max(paddleLeft, Math.min(paddleRight, hitX));
-        const paddleCenter = paddle.x + paddle.width / 2;
-        const rawHitPosition = (safeHitX - paddleCenter) / (paddle.width / 2);
-        const hitPosition = Math.max(-0.85, Math.min(0.85, rawHitPosition));
+        if (circleTouchesPaddleTop) {
+            const safeHitX = Math.max(paddleLeft, Math.min(paddleRight, hitX));
+            const paddleCenter = paddle.x + paddle.width / 2;
+            const rawHitPosition = (safeHitX - paddleCenter) / (paddle.width / 2);
+            const hitPosition = Math.max(-0.85, Math.min(0.85, rawHitPosition));
 
-        const angle = hitPosition * Math.PI / 3;
-        setBallDirection(Math.sin(angle), -Math.cos(angle));
+            const angle = hitPosition * Math.PI / 3;
+            setBallDirection(Math.sin(angle), -Math.cos(angle));
 
-        ball.x = safeHitX;
-        ball.y = paddleTop - ball.radius - 0.5;
-        ball.prevX = ball.x;
-        ball.prevY = ball.y;
-        return;
-    }
+            ball.x = safeHitX;
+            ball.y = paddleTop - ball.radius - 0.5;
+            ball.prevX = ball.x;
+            ball.prevY = ball.y;
+            playPaddleHitSound();
+            return;
+        }
     }
 
     const verticalOverlap =
@@ -1306,6 +1975,8 @@ function useSaveButton() {
         return;
     }
 
+    playSalvationSound();
+
     score = Math.max(0, score - SAVE_COST);
     scoreElement.textContent = score;
 
@@ -1370,6 +2041,7 @@ function activateFreeze(row, col) {
     freezePauseStartedAt = 0;
     
     addExplosion(row, col, '#93c5fd', 1.4);
+    addFloatingFreezeText(row, col);
 }
 
 function reflectBallFromBlock(x, y) {
@@ -1434,14 +2106,24 @@ function collideWithSingleBlock(row, col, block, y) {
     let pointsEarned = 0;
 
     if (block.isBomb) {
-    pointsEarned = explodeBomb(row, col);
+        playBombSound();
+        pointsEarned = explodeBomb(row, col);
     } else if (block.isFreeze) {
-    pointsEarned = destroyBlock(row, col);
-    activateFreeze(row, col);
+        playFreezeSound();
+        pointsEarned = destroyBlock(row, col);
+        activateFreeze(row, col);
     } else {
-    pointsEarned = destroyBlock(row, col);
-    addExplosion(row, col, block.color, 1.1);
+        playBlockHitSound();
+        pointsEarned = destroyBlock(row, col);
+        addExplosion(row, col, block.color, 1.1);
     }
+
+    addFloatingScoreText(
+        x + BLOCK_WIDTH / 2,
+        y + BLOCK_HEIGHT / 2,
+        pointsEarned,
+        block.color
+    );
 
     reflectBallFromBlock(x, y);
     score += pointsEarned;
@@ -1510,9 +2192,12 @@ function checkBlocksReachedPaddle() {
         const y = getBlockY(row);
 
         if (y + BLOCK_HEIGHT >= paddle.y) {
-        gameOver = true;
-        
-        return;
+            if (!gameOver) {
+                playGameOverSound();
+            }
+
+            gameOver = true;
+            return;
         }
     }
     }
@@ -1571,6 +2256,8 @@ function update(deltaSeconds) {
         if (gameOver && freezeStoppedAt === 0) {
             freezeStoppedAt = performance.now();
         }
+
+        updateFloatingScoreTexts(deltaSeconds * 60);
         return;
     }
 
@@ -1582,6 +2269,7 @@ function update(deltaSeconds) {
         winAnimationTime += deltaSeconds;
         updateWinExplosions();
         updateExplosions(deltaSeconds * 60);
+        updateFloatingScoreTexts(deltaSeconds * 60);
         return;
     }
 
@@ -1591,6 +2279,7 @@ function update(deltaSeconds) {
     updatePaddleByKeyboard(deltaSeconds * 60);
     updateTimedRows();
     updateExplosions(deltaSeconds * 60);
+    updateFloatingScoreTexts(deltaSeconds * 60);
 
     const maxStepSeconds = 1 / 120;
     const steps = Math.max(1, Math.ceil(deltaSeconds / maxStepSeconds));
@@ -1605,27 +2294,15 @@ function update(deltaSeconds) {
     }
 }
 
-function drawFPS() {
-    ctx.save();
-
-    ctx.fillStyle = 'rgb(0, 255, 0)';
-    ctx.font = '18px Arial';
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'bottom';
-
-    ctx.fillText(`FPS: ${fps}`, WIDTH -10, HEIGHT - 22);
-
-    ctx.restore();
-}
-
 function drawWinProgress() {
     const requiredScore = getScoreRequiredToCompleteGame();
     const progress = Math.max(0, Math.min(1, score / requiredScore));
 
-    const barX = 0;
-    const barY = 0;
-    const barWidth = WIDTH;
-    const barHeight = 10;
+    const barX = 2;
+    const barWidth = WIDTH - 4;
+
+    const barY = PROGRESS_TOP;
+    const barHeight = PROGRESS_HEIGHT;
 
     const colorStops = [
         [0,    [0, 0, 255]],     // blue
@@ -1704,45 +2381,34 @@ function drawWinProgress() {
     ctx.restore();
 }
 
+function drawHUD() {
+    ctx.save();
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.86)';
+    ctx.fillRect(0, 0, WIDTH, HUD_PANEL_HEIGHT);
+
+    ctx.strokeStyle = '#374151';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, WIDTH - 2, HUD_PANEL_HEIGHT - 2);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.textBaseline = 'top';
+    ctx.font = `${16 * UI_SCALE}px Arial`;
+
+    ctx.textAlign = 'left';
+    ctx.fillText(`SCORE: ${score}`, 8 * UI_SCALE, HUD_TOP);
+
+    ctx.textAlign = 'center';
+    ctx.fillText(`BEST: ${highScore}`, WIDTH / 2, HUD_TOP);
+
+    ctx.textAlign = 'right';
+    ctx.fillText(`LEVEL: ${level}`, WIDTH - 8 * UI_SCALE, HUD_TOP);
+
+    ctx.restore();
+}
+
 function updateWinProgressBar() {
-    const requiredScore = getScoreRequiredToCompleteGame();
-    const progress = Math.max(0, Math.min(1, score / requiredScore));
-
-    const colorStops = [
-        [0, [0, 0, 255]],
-        [0.25, [0, 255, 0]],
-        [0.5, [255, 255, 0]],
-        [0.75, [255, 127, 0]],
-        [0.95, [255, 0, 0]]
-    ];
-
-    let fillColor = 'rgb(0,0,255)';
-
-    for (let i = 0; i < colorStops.length - 1; i++) {
-        const [p1, c1] = colorStops[i];
-        const [p2, c2] = colorStops[i + 1];
-
-        if (progress >= p1 && progress <= p2) {
-            const t = (progress - p1) / (p2 - p1);
-            fillColor = interpolateColor(c1, c2, t);
-            break;
-        }
-
-        if (progress > 0.95) {
-            fillColor = 'rgb(255,0,0)';
-        }
-    }
-
-    winProgressFillElement.style.width = `${progress * 100}%`;
-    winProgressFillElement.style.setProperty('--progress-color', fillColor);
-
-    if (!gameStarted || isPaused || gameOver || gameWon) {
-        winProgressElement.style.animationPlayState = 'paused';
-        winProgressFillElement.style.animationPlayState = 'paused';
-    } else {
-        winProgressElement.style.animationPlayState = 'running';
-        winProgressFillElement.style.animationPlayState = 'running';
-    }
+    return;
 }
 
 function lerpColor(a, b, t) {
@@ -1751,6 +2417,81 @@ function lerpColor(a, b, t) {
 
 function interpolateColor(c1, c2, t) {
     return `rgb(${lerpColor(c1[0], c2[0], t)}, ${lerpColor(c1[1], c2[1], t)}, ${lerpColor(c1[2], c2[2], t)})`;
+}
+
+function drawRoundedRect(x, y, width, height, radius) {
+    const r = Math.min(radius, width / 2, height / 2);
+
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + width - r, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+    ctx.lineTo(x + width, y + height - r);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+    ctx.lineTo(x + r, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+}
+
+function drawBlocksPanel(x, y, width, height, radius) {
+    ctx.save();
+
+    const gradient = ctx.createLinearGradient(x, y, x, y + height);
+    gradient.addColorStop(0, 'rgba(17, 24, 39, 0.94)');
+    gradient.addColorStop(1, 'rgba(3, 7, 18, 0.94)');
+
+    ctx.fillStyle = gradient;
+    drawRoundedRect(x, y, width, height, radius);
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+    ctx.lineWidth = 2;
+    drawRoundedRect(x, y, width, height, radius);
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+function drawRulesPanel() {
+    const panelWidth = WIDTH * 0.79;
+    const panelHeight = 160 * UI_SCALE;
+    const panelX = WIDTH / 2 - panelWidth / 2;
+    const panelY = HEIGHT * 0.148;
+
+    ctx.save();
+
+    ctx.fillStyle = 'rgba(3, 7, 18, 0.78)';
+    drawRoundedRect(panelX, panelY, panelWidth, panelHeight, 18);
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.69)';
+    ctx.lineWidth = 2;
+    drawRoundedRect(panelX, panelY, panelWidth, panelHeight, 18);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.82)';
+    ctx.font = `${16 * UI_SCALE}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const lines = [
+        'Move the paddle and break blocks.',
+        'Bomb destroys nearby blocks.',
+        'Freeze stops blocks for 10 seconds.',
+        'Salvation clears safe zone for 3000 score.',
+        'Do not let blocks reach the red line.'
+    ];
+
+    const lineHeight = 24 * UI_SCALE;
+    const startY = panelY + 35 * UI_SCALE;
+
+    for (let i = 0; i < lines.length; i++) {
+        ctx.fillText(lines[i], WIDTH / 2, startY + i * lineHeight);
+    }
+
+    ctx.restore();
 }
 
 function drawStartButton() {
@@ -1790,40 +2531,35 @@ function drawStartButton() {
     }
 
     ctx.fillText(label, x, y);
+    
+    drawRulesPanel();
 
     ctx.restore();
 }
 
 function drawSaveButton() {
-    if (!gameStarted || gameOver || gameWon || isPaused) {
+    if (!canShowSaveButton()) {
         return;
     }
 
-    const canSave = score >= SAVE_COST;
+    updateSaveButtonPosition();
 
     ctx.save();
 
-    ctx.globalAlpha = canSave ? 0.82 : 0.32;
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(
-        saveButton.x - saveButton.width / 2,
-        saveButton.y - saveButton.height / 2,
-        saveButton.width,
-        saveButton.height
-    );
+    const x = saveButton.x - saveButton.width / 2;
+    const y = saveButton.y - saveButton.height / 2;
 
-    ctx.globalAlpha = canSave ? 1 : 0.45;
-    ctx.strokeStyle = canSave ? '#ffffff' : '#9ca3af';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(
-        saveButton.x - saveButton.width / 2,
-        saveButton.y - saveButton.height / 2,
-        saveButton.width,
-        saveButton.height
-    );
+    ctx.fillStyle = 'rgba(3, 7, 18, 0.30)';
+    drawRoundedRect(x, y, saveButton.width, saveButton.height, 18);
+    ctx.fill();
 
-    ctx.fillStyle = canSave ? '#ffffff' : '#9ca3af';
-    ctx.font = '20px Arial';
+    ctx.strokeStyle = '#ffdf8ebe';
+    ctx.lineWidth = 3;
+    drawRoundedRect(x, y, saveButton.width, saveButton.height, 18);
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffdf8ebe';
+    ctx.font = `bold ${22 * UI_SCALE}px Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('SALVATION', saveButton.x, saveButton.y);
@@ -1841,6 +2577,8 @@ function drawPauseOverlay() {
     // dark overlay
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+    drawRulesPanel();
 
     // button
     const x = startButton.x;
@@ -1868,30 +2606,42 @@ function drawPauseOverlay() {
 
 function draw() {
     ctx.clearRect(0, 0, WIDTH, HEIGHT);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(3, 3, WIDTH - 6, HEIGHT - 6);
+    ctx.clip();
 
-    updateWinProgressBar();
     drawPendingTopRow();
     drawBlocks();
     drawExplosions();
+    drawFloatingScoreTexts();
     drawSafeZone();
     drawDangerLine();
     drawPaddle();
     drawSaveButton();
     drawBall();
+
+    drawHUD();
+    drawWinProgress();
+
+    drawBuildInfo();
+    drawSoundButton();
     drawFreezeTimer();
     drawFPS();
     drawRunTimer();
     drawPauseOverlay();
 
     if (gameOver) {
-    drawGameOver();
+        drawGameOver();
     }
 
     if (gameWon) {
-    drawWin();
+        drawWin();
     }
 
     drawStartButton();
+
+    ctx.restore();
 }
 
 function loop(timestamp) {

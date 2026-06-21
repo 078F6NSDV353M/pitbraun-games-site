@@ -1,3 +1,65 @@
+function createBubblesDom() {
+  const gameRoot = document.getElementById('gameRoot');
+
+  if (!gameRoot) {
+    throw new Error('Bubbles: #gameRoot was not found.');
+  }
+
+  gameRoot.innerHTML = `
+<canvas id="gameCanvas"></canvas>
+
+          <div class="hud">
+            <div class="hudBox" style="text-align:center;">
+              <div class="hudLabel">Score</div>
+              <div class="hudValue" id="scoreText">0</div>
+            </div>
+
+            <div class="hudBox" style="text-align:center;">
+              <div class="hudLabel">Max Score</div>
+              <div class="hudValue" id="maxScoreText">0</div>
+            </div>
+
+            <div class="hudBox" style="text-align:center;">
+              <div class="hudLabel">Combo</div>
+              <div class="hudValue" id="comboText">x1</div>
+            </div>
+          </div>
+
+          <div class="centerPanel" id="menuPanel">
+            <div class="card">
+              <h1>
+                <span class="titleLetter titleCyan">B</span>
+                <span class="titleLetter titleYellow">U</span>
+                <span class="titleLetter titlePink">B</span>
+                <span class="titleLetter titleGreen">B</span>
+                <span class="titleLetter titleCyan">L</span>
+                <span class="titleLetter titleYellow">E</span>
+                <span class="titleLetter titlePink">S</span>
+              </h1>
+
+              <p>
+                Tap the screen. Match the color and split the big balls into pieces.
+              </p>
+
+              <button class="button" id="startButton">START</button>
+            </div>
+          </div>
+
+          <div class="controlBar"></div>
+
+          <div class="hint hidden">Tap to shoot.</div>
+
+          <button class="pauseButton" id="pauseButton" aria-label="Pause game">
+            <div class="pauseBars"><span></span><span></span></div>
+            <div class="pausePlay"></div>
+          </button>
+
+          <div class="buildVersion">Build V117</div>
+  `;
+}
+
+createBubblesDom();
+
 const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const scoreText = document.getElementById('scoreText');
@@ -94,9 +156,10 @@ const canvas = document.getElementById('gameCanvas');
 
     async function startGame() {
       initAudio();
-      playClickSound();
+      playStartSound();
       resetGame();
       paused = false;
+      updatePauseButton();
       running = true;
       menuPanel.classList.add('hidden');
       lastTime = performance.now();
@@ -107,6 +170,7 @@ const canvas = document.getElementById('gameCanvas');
       if (!running) return;
 
       paused = !paused;
+      updatePauseButton();
 
       if (!paused) {
         lastTime = performance.now();
@@ -114,8 +178,19 @@ const canvas = document.getElementById('gameCanvas');
       }
     }
 
+    function updatePauseButton() {
+      pauseButton.classList.toggle('isPaused', paused);
+      pauseButton.setAttribute(
+        'aria-label',
+        paused ? 'Resume game' : 'Pause game'
+      );
+    }
+
     function gameOver() {
       running = false;
+      paused = false;
+      updatePauseButton();
+      playGameOverSound();
 
       menuPanel.classList.remove('hidden');
 
@@ -181,7 +256,7 @@ const canvas = document.getElementById('gameCanvas');
     }
 
     function shoot(targetX, targetY) {
-      if (!running) return;
+      if (!running || paused) return;
 
       playShootSound();
 
@@ -377,6 +452,8 @@ const canvas = document.getElementById('gameCanvas');
           if (hit.enemy.hp <= 0) {
             enemies.splice(hit.index, 1);
             splitEnemy(hit.enemy);
+          } else {
+            playShieldHitSound();
           }
         } else {
           wrongHit(hit.enemy);
@@ -683,6 +760,20 @@ const canvas = document.getElementById('gameCanvas');
       playTone(620, 0.03, 'triangle', 0.035, 420);
     }
 
+    function playStartSound() {
+      playTone(262, 0.08, 'triangle', 0.045); // C
+      setTimeout(() => playTone(330, 0.08, 'triangle', 0.045), 90); // E
+      setTimeout(() => playTone(392, 0.09, 'triangle', 0.05), 180); // G
+      setTimeout(() => playTone(523, 0.13, 'triangle', 0.06), 285); // C
+    }
+
+    function playGameOverSound() {
+      playTone(523, 0.10, 'triangle', 0.05); // C
+      setTimeout(() => playTone(392, 0.10, 'triangle', 0.05), 120); // G
+      setTimeout(() => playTone(330, 0.12, 'triangle', 0.05), 240); // E
+      setTimeout(() => playTone(262, 0.18, 'triangle', 0.06), 380); // C
+    }
+
     function playPopSound(radius) {
       const base = Math.max(90, 260 - radius * 2.2);
       const sizeBoost = Math.min(0.11, radius / 520);
@@ -695,8 +786,15 @@ const canvas = document.getElementById('gameCanvas');
       playTone(140, 0.12, 'triangle', 0.045, 110);
     }
 
+    function playShieldHitSound() {
+      playTone(680, 0.045, 'triangle', 0.075, 520);
+      playTone(360, 0.07, 'sine', 0.045, 300);
+    }
+
     function handlePointerDown(event) {
       event.preventDefault();
+
+      if (paused) return;
 
       const point = getCanvasPoint(event);
 
@@ -716,7 +814,7 @@ const canvas = document.getElementById('gameCanvas');
     }
 
     function handlePointerMove(event) {
-      if (!isChoosingColor) return;
+      if (paused || !isChoosingColor) return;
       event.preventDefault();
 
       const point = getCanvasPoint(event);
@@ -736,6 +834,7 @@ const canvas = document.getElementById('gameCanvas');
     }
 
     function updateColorFromWheel(x, y) {
+      if (paused) return;
       const dx = x - wheelCenterX;
       const dy = y - wheelCenterY;
       const distToCenter = Math.hypot(dx, dy);
@@ -815,6 +914,8 @@ const canvas = document.getElementById('gameCanvas');
 
         return;
       }
+
+      if (paused) return;
 
       switch (event.code) {
         case 'KeyZ':

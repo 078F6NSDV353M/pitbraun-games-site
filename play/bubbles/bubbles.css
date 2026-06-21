@@ -20,6 +20,10 @@
 
   overflow:hidden;
 
+  border:1px solid var(--color-border);
+  border-radius:12px;
+  box-sizing:border-box;
+
   background:
     radial-gradient(circle at 50% 18%, rgba(92,45,255,0.28), transparent 34%),
     radial-gradient(circle at 18% 76%, rgba(0,229,255,0.16), transparent 30%),
@@ -55,7 +59,8 @@ canvas{
 }
 
 .hudBox{
-  min-width:calc(132px * var(--game-scale));
+  width:calc(170px * var(--game-scale));
+  min-width:calc(170px * var(--game-scale));
   padding:calc(15px * var(--game-scale)) calc(18px * var(--game-scale));
 
   color:#ffffff;
@@ -236,30 +241,43 @@ canvas{
 }
 
 .pauseBars{
-  position:relative;
-  width:calc(18px * var(--game-scale));
-  height:calc(22px * var(--game-scale));
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:calc(6px * var(--game-scale));
+
+  width:calc(28px * var(--game-scale));
+  height:calc(28px * var(--game-scale));
 }
 
-.pauseBars::before,
-.pauseBars::after{
-  content:"";
-  position:absolute;
-  top:0;
-
-  width:calc(5px * var(--game-scale));
-  height:100%;
-  border-radius:calc(4px * var(--game-scale));
+.pauseBars span{
+  display:block;
+  width:calc(7px * var(--game-scale));
+  min-width:2px;
+  height:calc(24px * var(--game-scale));
 
   background:currentColor;
+  border-radius:calc(4px * var(--game-scale));
 }
 
-.pauseBars::before{
-  left:0;
+.pausePlay{
+  display:none;
+  width:0;
+  height:0;
+
+  border-top:calc(13px * var(--game-scale)) solid transparent;
+  border-bottom:calc(13px * var(--game-scale)) solid transparent;
+  border-left:calc(22px * var(--game-scale)) solid currentColor;
+
+  transform:translateX(calc(2px * var(--game-scale)));
 }
 
-.pauseBars::after{
-  right:0;
+.pauseButton.isPaused .pauseBars{
+  display:none;
+}
+
+.pauseButton.isPaused .pausePlay{
+  display:block;
 }
 
 .buildVersion{
@@ -281,25 +299,3 @@ canvas{
   display:none;
 }
 
-@media (max-width:480px){
-  .hud{
-    top:calc(10px * var(--game-scale));
-    left:calc(10px * var(--game-scale));
-    right:calc(10px * var(--game-scale));
-    gap:calc(8px * var(--game-scale));
-  }
-
-  .hudBox{
-    min-width:0;
-    padding:calc(10px * var(--game-scale)) calc(10px * var(--game-scale));
-    border-radius:calc(18px * var(--game-scale));
-  }
-
-  .hudLabel{
-    font-size:calc(13px * var(--game-scale));
-  }
-
-  .hudValue{
-    font-size:calc(28px * var(--game-scale));
-  }
-}

@@ -7,5 +7,5 @@ async function loadBlock(id, file) {
     el.innerHTML = html;
 }
 
-loadBlock("header", "../shared/blocks/header.html");
-loadBlock("footer", "../shared/blocks/footer.html");
+loadBlock("header", "../shared/html/header.html");
+loadBlock("footer", "../shared/html/footer.html");
