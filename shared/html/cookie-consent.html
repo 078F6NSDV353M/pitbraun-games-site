@@ -1,0 +1,143 @@
+<div
+  class="cookie-consent"
+  id="cookieConsent"
+  hidden
+>
+  <div class="cookie-consent__banner">
+
+    <div class="cookie-consent__text">
+      <strong>Privacy settings</strong>
+
+      <p>
+        We use necessary technologies to operate the website
+        and optional analytics to understand how the site is used.
+      </p>
+
+      <p>
+        <a href="/legal/cookies/">Cookie Policy</a>
+        ·
+        <a href="/legal/privacy/">Privacy Policy</a>
+      </p>
+    </div>
+
+    <div class="cookie-consent__actions">
+      <button
+        type="button"
+        class="cookie-consent__button"
+        data-consent-reject
+      >
+        Reject
+      </button>
+
+      <button
+        type="button"
+        class="cookie-consent__button"
+        data-consent-settings
+      >
+        Settings
+      </button>
+
+      <button
+        type="button"
+        class="cookie-consent__button cookie-consent__button--primary"
+        data-consent-accept
+      >
+        Accept all
+      </button>
+    </div>
+
+  </div>
+
+  <div
+    class="cookie-consent__overlay"
+    data-consent-overlay
+    hidden
+  >
+    <div
+      class="cookie-consent__modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="cookieSettingsTitle"
+    >
+
+      <div class="cookie-consent__modal-header">
+        <h2 id="cookieSettingsTitle">
+          Privacy settings
+        </h2>
+
+        <button
+          type="button"
+          class="cookie-consent__close"
+          aria-label="Close privacy settings"
+          data-consent-close
+        >
+          ×
+        </button>
+      </div>
+
+      <div class="cookie-consent__category">
+
+        <div class="cookie-consent__category-info">
+          <strong>Necessary</strong>
+
+          <p>
+            Required for website operation, security and
+            essential functionality.
+          </p>
+        </div>
+
+        <label class="cookie-consent__switch">
+          <input
+            type="checkbox"
+            checked
+            disabled
+          >
+          <span>Always active</span>
+        </label>
+
+      </div>
+
+      <div class="cookie-consent__category">
+
+        <div class="cookie-consent__category-info">
+          <strong>Analytics</strong>
+
+          <p>
+            Allows Google Analytics to measure general website
+            usage and help us improve the site.
+          </p>
+        </div>
+
+        <label class="cookie-consent__switch">
+          <input
+            type="checkbox"
+            id="analyticsConsent"
+          >
+          <span>Allow</span>
+        </label>
+
+      </div>
+
+      <div class="cookie-consent__modal-actions">
+
+        <button
+          type="button"
+          class="cookie-consent__button"
+          data-consent-reject
+        >
+          Reject all
+        </button>
+
+        <button
+          type="button"
+          class="cookie-consent__button cookie-consent__button--primary"
+          data-consent-save
+        >
+          Save preferences
+        </button>
+
+      </div>
+
+    </div>
+  </div>
+</div>

@@ -18,6 +18,36 @@ async function loadBlock(id, file) {
     }
 }
 
-loadBlock("header", "/shared/html/header.html");
-loadBlock("legal-header", "/shared/html/legal-header.html");
-loadBlock("footer", "/shared/html/footer.html");
+function loadCookieConsent() {
+    if (
+        document.querySelector(
+            'script[src="/shared/js/cookie-consent.js"]'
+        )
+    ) {
+        return;
+    }
+
+    const script = document.createElement("script");
+
+    script.src = "/shared/js/cookie-consent.js";
+    script.defer = true;
+
+    document.head.appendChild(script);
+}
+
+loadBlock(
+    "header",
+    "/shared/html/header.html"
+);
+
+loadBlock(
+    "legal-header",
+    "/shared/html/legal-header.html"
+);
+
+loadBlock(
+    "footer",
+    "/shared/html/footer.html"
+);
+
+loadCookieConsent();
